@@ -222,156 +222,291 @@ def go_to_search():
     st.session_state.screen = "search"
     st.session_state.ticker = ""
 
-# ── COMPANY SEARCH ───────────────────────────────────────────────────────────
-@st.cache_data(ttl=300)
-def search_companies(query):
-    if len(query) < 2:
+# ── SMART SEARCH — fuzzy, case-insensitive, multi-exchange ───────────────────
+EXCHANGE_LABELS = {
+    "NSI": ("NSE", "🇮🇳", "#f97316"),
+    "BSE": ("BSE", "🇮🇳", "#fb923c"),
+    "NMS": ("NASDAQ", "🇺🇸", "#38bdf8"),
+    "NYQ": ("NYSE",   "🇺🇸", "#60a5fa"),
+    "NGM": ("NASDAQ", "🇺🇸", "#38bdf8"),
+    "PCX": ("NYSE",   "🇺🇸", "#60a5fa"),
+    "LSE": ("LSE",    "🇬🇧", "#a78bfa"),
+    "FRA": ("Frankfurt","🇩🇪","#4ade80"),
+    "TYO": ("Tokyo",  "🇯🇵", "#f472b6"),
+    "CCC": ("Crypto", "₿",   "#fbbf24"),
+    "CCY": ("Forex",  "💱",  "#94a3b8"),
+}
+TYPE_LABELS = {
+    "EQUITY":     ("Stock",  "#38bdf8"),
+    "ETF":        ("ETF",    "#a78bfa"),
+    "MUTUALFUND": ("Fund",   "#4ade80"),
+    "INDEX":      ("Index",  "#fbbf24"),
+    "CRYPTOCURRENCY": ("Crypto", "#fbbf24"),
+}
+
+@st.cache_data(ttl=120, show_spinner=False)
+def search_companies(raw_query):
+    """
+    Smart search: tries the query as-is, then strips non-alphanumeric chars
+    and tries again, so typos / extra spaces / wrong case all resolve.
+    Returns deduplicated results grouped so same-company multi-exchange
+    listings appear together (e.g. INFY.NS and INFY.BO both show up).
+    """
+    q = raw_query.strip()
+    if len(q) < 1:
         return []
-    try:
-        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={requests.utils.quote(query)}&quotesCount=8&newsCount=0&listsCount=0"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        r = requests.get(url, headers=headers, timeout=6)
-        data = r.json()
-        results = []
-        for q in data.get("quotes", []):
-            if q.get("quoteType") in ("EQUITY", "ETF", "MUTUALFUND", "INDEX"):
-                symbol   = q.get("symbol", "")
-                name     = q.get("longname") or q.get("shortname") or symbol
-                exchange = q.get("exchange", "")
-                type_    = q.get("quoteType", "")
-                results.append({"symbol": symbol, "name": name, "exchange": exchange, "type": type_})
-        return results
-    except:
-        return []
+
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+    def _fetch(query_str, count=10):
+        try:
+            url = (
+                "https://query2.finance.yahoo.com/v1/finance/search"
+                f"?q={requests.utils.quote(query_str)}"
+                f"&quotesCount={count}&newsCount=0&listsCount=0&enableFuzzyQuery=true"
+            )
+            r = requests.get(url, headers=headers, timeout=7)
+            return r.json().get("quotes", [])
+        except:
+            return []
+
+    # Fetch with original query + a cleaned version for typo tolerance
+    seen_syms = set()
+    raw_results = []
+    for attempt in [q, q.replace(" ", ""), q.upper(), q.lower()]:
+        for item in _fetch(attempt, 12):
+            sym = item.get("symbol", "")
+            if sym and sym not in seen_syms:
+                seen_syms.add(sym)
+                raw_results.append(item)
+        if raw_results:
+            break  # stop once we get hits
+
+    results = []
+    for item in raw_results:
+        qtype = item.get("quoteType", "")
+        if qtype not in ("EQUITY", "ETF", "MUTUALFUND", "INDEX", "CRYPTOCURRENCY"):
+            continue
+        symbol   = item.get("symbol", "")
+        name     = item.get("longname") or item.get("shortname") or symbol
+        exch_raw = item.get("exchange", "")
+        exch_info = EXCHANGE_LABELS.get(exch_raw, (exch_raw, "🌐", "#94a3b8"))
+        type_info = TYPE_LABELS.get(qtype, (qtype, "#94a3b8"))
+
+        # Derive the base ticker (without suffix) for grouping
+        base = symbol.split(".")[0]
+
+        results.append({
+            "symbol":     symbol,
+            "name":       name,
+            "base":       base,
+            "exch_raw":   exch_raw,
+            "exch_label": exch_info[0],
+            "exch_flag":  exch_info[1],
+            "exch_color": exch_info[2],
+            "type_label": type_info[0],
+            "type_color": type_info[1],
+        })
+
+    return results
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SCREEN 1 — SEARCH
 # ══════════════════════════════════════════════════════════════════════════════
 if st.session_state.screen == "search":
 
-    # Logo
+    # ── Result button CSS (scoped, doesn't bleed to dashboard) ───────────────
     st.markdown("""
-    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}</style>
+    <style>
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+    .search-result-btn > div > button {
+        background: rgba(15,21,32,0.75) !important;
+        border: 1px solid rgba(148,163,184,0.1) !important;
+        border-radius: 11px !important;
+        color: #cbd5e1 !important;
+        font-family: 'Space Grotesk', sans-serif !important;
+        font-size: 14px !important;
+        font-weight: 400 !important;
+        text-align: left !important;
+        padding: 13px 18px !important;
+        box-shadow: none !important;
+        margin-bottom: 3px !important;
+        transition: all 0.15s !important;
+        animation: fadeIn 0.2s ease !important;
+    }
+    .search-result-btn > div > button:hover {
+        background: rgba(56,189,248,0.07) !important;
+        border-color: rgba(56,189,248,0.28) !important;
+        color: #f1f5f9 !important;
+        transform: translateX(2px) !important;
+    }
+    /* quick-pick buttons */
+    .qpick > div > button {
+        background: rgba(15,21,32,0.6) !important;
+        border: 1px solid rgba(148,163,184,0.1) !important;
+        border-radius: 10px !important;
+        color: #64748b !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 12px !important;
+        font-weight: 400 !important;
+        padding: 8px 6px !important;
+        box-shadow: none !important;
+        transition: all 0.15s !important;
+    }
+    .qpick > div > button:hover {
+        background: rgba(56,189,248,0.08) !important;
+        border-color: rgba(56,189,248,0.25) !important;
+        color: #38bdf8 !important;
+    }
+    </style>""", unsafe_allow_html=True)
+
+    # ── Logo bar ─────────────────────────────────────────────────────────────
+    st.markdown("""
     <div style="display:flex;align-items:center;justify-content:space-between;
-                padding-bottom:24px;border-bottom:1px solid rgba(148,163,184,0.08);margin-bottom:48px;">
-        <div style="display:flex;align-items:center;gap:14px;">
-            <div style="width:38px;height:38px;border-radius:10px;
+                padding-bottom:22px;border-bottom:1px solid rgba(148,163,184,0.07);margin-bottom:52px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;border-radius:9px;
                         background:linear-gradient(135deg,#38bdf8,#0ea5e9);
                         display:flex;align-items:center;justify-content:center;
-                        font-size:18px;box-shadow:0 4px 20px rgba(56,189,248,0.35);">📈</div>
+                        font-size:17px;box-shadow:0 4px 18px rgba(56,189,248,0.3);">📈</div>
             <div>
-                <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:700;
                             color:#f8fafc;letter-spacing:-0.5px;line-height:1;">
                     Fin<span style='color:#38bdf8'>Scope</span></div>
-                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;
-                            color:#334155;letter-spacing:2px;margin-top:1px;">STOCK INTELLIGENCE</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;
+                            color:#334155;letter-spacing:2px;margin-top:2px;">STOCK INTELLIGENCE</div>
             </div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:7px;height:7px;border-radius:50%;background:#4ade80;
+        <div style="display:flex;align-items:center;gap:7px;">
+            <div style="width:6px;height:6px;border-radius:50%;background:#4ade80;
                         box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite;"></div>
-            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#334155;letter-spacing:1px;">LIVE DATA</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                         color:#334155;letter-spacing:1.5px;">LIVE DATA</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Hero text
+    # ── Hero ──────────────────────────────────────────────────────────────────
     st.markdown("""
-    <div style="text-align:center;margin-bottom:36px;">
+    <div style="text-align:center;margin-bottom:40px;">
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;
                     color:#38bdf8;text-transform:uppercase;margin-bottom:14px;">Real-Time Financial Analysis</div>
         <div style="font-family:'Space Grotesk',sans-serif;font-size:52px;font-weight:700;
-                    color:#f8fafc;letter-spacing:-2px;line-height:1.05;margin-bottom:12px;">
+                    color:#f8fafc;letter-spacing:-2px;line-height:1.05;margin-bottom:14px;">
             Analyse Any Stock<br><span style='color:#38bdf8'>Instantly</span>
         </div>
-        <div style="font-size:16px;color:#475569;max-width:440px;margin:0 auto;line-height:1.6;">
-            DCF valuation · 30+ ratios · Buy/Sell signals<br>for any stock globally — free, live, automated
+        <div style="font-size:15px;color:#475569;max-width:420px;margin:0 auto;line-height:1.7;">
+            Type a company name or ticker — even with typos.<br>
+            We'll find the right stock automatically.
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Search bar
+    # ── Search box ────────────────────────────────────────────────────────────
     _, sc, _ = st.columns([1, 3, 1])
     with sc:
-        query = st.text_input("", placeholder="🔍  Apple, Tesla, RELIANCE.NS, NVDA, Bitcoin…", key="search_query")
-        search_clicked = st.button("Search →", key="search_btn", use_container_width=True)
+        query = st.text_input(
+            "", key="search_query",
+            placeholder="🔍  infosys, appel, reliance, tsla, bitcoin…"
+        )
 
-        # Live results dropdown
-        if query and len(query) >= 2:
-            results = search_companies(query)
-            if results:
-                st.markdown("""
-                <div style="background:rgba(10,14,22,0.98);border:1px solid rgba(56,189,248,0.15);
-                            border-radius:12px;padding:6px;margin-top:4px;backdrop-filter:blur(20px);">
-                    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;
-                                color:#334155;text-transform:uppercase;padding:6px 10px 2px;">Results</div>
-                </div>""", unsafe_allow_html=True)
+        results = []
+        if query and len(query.strip()) >= 1:
+            with st.spinner(""):
+                results = search_companies(query)
 
-                for r in results:
-                    label = f"{r['name']}  ·  **{r['symbol']}**  ·  {r['exchange']}"
-                    if st.button(f"{r['name']}   {r['symbol']}   {r['exchange']}", key=f"res_{r['symbol']}", use_container_width=True):
-                        go_to_dashboard(r['symbol'])
-                        st.rerun()
+        # ── Results list ──────────────────────────────────────────────────────
+        if results:
+            st.markdown(f"""
+            <div style="margin:8px 0 6px;display:flex;align-items:center;gap:8px;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:9px;
+                             letter-spacing:2px;color:#334155;text-transform:uppercase;">
+                    {len(results)} result{'s' if len(results)!=1 else ''} found
+                </span>
+                <div style="flex:1;height:1px;background:rgba(148,163,184,0.07);"></div>
+            </div>""", unsafe_allow_html=True)
 
-                st.markdown("""
-                <style>
-                div[data-testid="stVerticalBlock"] > div:has(button[kind="secondary"]) button {
-                    background: rgba(15,21,32,0.7) !important;
-                    border: 1px solid rgba(148,163,184,0.08) !important;
-                    border-radius: 10px !important;
-                    color: #cbd5e1 !important;
-                    font-family: 'Space Grotesk', sans-serif !important;
-                    font-size: 13px !important;
-                    font-weight: 400 !important;
-                    text-align: left !important;
-                    padding: 10px 16px !important;
-                    box-shadow: none !important;
-                    margin-bottom: 2px !important;
-                }
-                div[data-testid="stVerticalBlock"] > div:has(button[kind="secondary"]) button:hover {
-                    background: rgba(56,189,248,0.08) !important;
-                    border-color: rgba(56,189,248,0.2) !important;
-                    color: #38bdf8 !important;
-                }
-                </style>""", unsafe_allow_html=True)
+            for r in results:
+                # Build a rich single-line label
+                flag  = r["exch_flag"]
+                exch  = r["exch_label"]
+                ec    = r["exch_color"]
+                tc    = r["type_color"]
+                tl    = r["type_label"]
+                sym   = r["symbol"]
+                name  = r["name"]
+                btn_label = f"{flag}  {name}    {sym}  ·  {exch}  ·  {tl}"
 
-            elif len(query) >= 2:
-                st.markdown('<div style="color:#475569;font-family:JetBrains Mono,monospace;font-size:12px;padding:8px 0;text-align:center;">No results — try the ticker directly e.g. AAPL</div>', unsafe_allow_html=True)
+                st.markdown('<div class="search-result-btn">', unsafe_allow_html=True)
+                if st.button(btn_label, key=f"sr_{sym}", use_container_width=True):
+                    go_to_dashboard(sym)
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
-        # Direct ticker fallback
-        if search_clicked and query:
-            go_to_dashboard(query)
-            st.rerun()
-
-    # Quick picks
-    st.markdown("<div style='margin:36px 0 12px;text-align:center;font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:2px;color:#334155;text-transform:uppercase;'>Quick picks</div>", unsafe_allow_html=True)
-    qc = st.columns(10)
-    quick_tickers = [("AAPL","Apple"),("MSFT","Microsoft"),("NVDA","Nvidia"),("TSLA","Tesla"),
-                     ("GOOGL","Google"),("AMZN","Amazon"),("RELIANCE.NS","Reliance"),
-                     ("TCS.NS","TCS"),("INFY.NS","Infosys"),("BTC-USD","Bitcoin")]
-    for col, (sym, lbl) in zip(qc, quick_tickers):
-        with col:
-            if st.button(lbl, key=f"q_{sym}"):
-                go_to_dashboard(sym)
+        elif query and len(query.strip()) >= 1:
+            # Fallback — let them still try the raw query as a direct ticker
+            st.markdown(f"""
+            <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.18);
+                        border-radius:12px;padding:14px 18px;margin-top:8px;">
+                <div style="font-size:13px;color:#94a3b8;line-height:1.6;">
+                    No matches for <strong style="color:#fbbf24;">"{query}"</strong> — 
+                    try a different spelling, or press Enter to search directly as a ticker symbol.
+                </div>
+            </div>""", unsafe_allow_html=True)
+            if st.button(f"Try  '{query.strip().upper()}'  as direct ticker →",
+                         key="direct_ticker", use_container_width=True):
+                go_to_dashboard(query)
                 st.rerun()
 
-    # Feature cards
+    # ── Quick picks ──────────────────────────────────────────────────────────
     st.markdown("""
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px;">
-        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+    <div style="margin:44px 0 10px;text-align:center;font-family:'JetBrains Mono',monospace;
+                font-size:9px;letter-spacing:2.5px;color:#1e293b;text-transform:uppercase;">
+        ── Popular stocks ──
+    </div>""", unsafe_allow_html=True)
+
+    quick_tickers = [
+        ("AAPL","Apple 🇺🇸"),("MSFT","Microsoft 🇺🇸"),("NVDA","Nvidia 🇺🇸"),("TSLA","Tesla 🇺🇸"),
+        ("GOOGL","Google 🇺🇸"),("AMZN","Amazon 🇺🇸"),("RELIANCE.NS","Reliance 🇮🇳"),
+        ("TCS.NS","TCS 🇮🇳"),("INFY.NS","Infosys 🇮🇳"),("BTC-USD","Bitcoin ₿"),
+    ]
+    qc = st.columns(10)
+    for col, (sym, lbl) in zip(qc, quick_tickers):
+        with col:
+            st.markdown('<div class="qpick">', unsafe_allow_html=True)
+            if st.button(lbl, key=f"qp_{sym}"):
+                go_to_dashboard(sym)
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Feature cards ─────────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:52px;">
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);
+                    border-radius:14px;padding:24px;text-align:center;">
             <div style="font-size:26px;margin-bottom:10px;">📊</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">30+ Financial Ratios</div>
-            <div style="font-size:12px;color:#475569;line-height:1.6;">P/E, ROE, margins, liquidity, growth metrics and more</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;
+                        color:#e2e8f0;margin-bottom:6px;">30+ Financial Ratios</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">
+                P/E, ROE, margins, liquidity, growth metrics</div>
         </div>
-        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);
+                    border-radius:14px;padding:24px;text-align:center;">
             <div style="font-size:26px;margin-bottom:10px;">🎯</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">DCF + Graham Valuation</div>
-            <div style="font-size:12px;color:#475569;line-height:1.6;">Fair value estimates with buy / hold / sell scoring</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;
+                        color:#e2e8f0;margin-bottom:6px;">DCF + Graham Valuation</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">
+                Fair value with buy / hold / sell signal</div>
         </div>
-        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);
+                    border-radius:14px;padding:24px;text-align:center;">
             <div style="font-size:26px;margin-bottom:10px;">🌍</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Global Markets</div>
-            <div style="font-size:12px;color:#475569;line-height:1.6;">US, India, UK, Europe, crypto and ETFs</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;
+                        color:#e2e8f0;margin-bottom:6px;">Global Markets</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">
+                US · India NSE/BSE · UK · Europe · Crypto</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
