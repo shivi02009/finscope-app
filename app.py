@@ -429,7 +429,7 @@ with tab1:
                 fillcolor=f"rgba({'74,222,128' if line_col=='#4ade80' else '248,113,113'},0.08)",
                 hovertemplate=f"{currency} %{{y:.2f}}<extra></extra>"
             ))
-            fig.update_layout(**PLOT_LAYOUT, height=240)
+            fig.update_layout(**{**PLOT_LAYOUT, "height":240})
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     with c2:
@@ -446,8 +446,7 @@ with tab1:
                     go.Bar(name="Revenue",    x=yr, y=rv, marker_color="rgba(96,165,250,0.8)",   marker_line_width=0),
                     go.Bar(name="Net Income", x=yr, y=nv, marker_color="rgba(74,222,128,0.8)", marker_line_width=0),
                 ])
-                fig2.update_layout(**PLOT_LAYOUT, height=240, barmode="group",
-                    legend=dict(font=dict(size=10,color="#8b92a5"), bgcolor="rgba(0,0,0,0)"))
+                fig2.update_layout(**{**PLOT_LAYOUT, "height":240, "barmode":"group", "legend":dict(font=dict(size=10,color="#8b92a5"),bgcolor="rgba(0,0,0,0)")})
                 st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("<div style='margin:8px 0;'></div>", unsafe_allow_html=True)
@@ -548,9 +547,10 @@ with tab2:
             text=[f"{currency} {v:.2f}" for v in val_items.values()],
             textposition="outside", textfont=dict(color="#8b92a5", size=11, family="DM Mono"),
         ))
-        fig_v.update_layout(**PLOT_LAYOUT, height=180,
-            xaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=10)),
-            yaxis=dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(size=11,family="DM Mono",color="#8b92a5")))
+        vl = {**PLOT_LAYOUT, "height": 180}
+        vl["xaxis"] = dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(size=10))
+        vl["yaxis"] = dict(gridcolor="rgba(0,0,0,0)", tickfont=dict(size=11, family="DM Mono", color="#8b92a5"))
+        fig_v.update_layout(**vl)
         st.plotly_chart(fig_v, use_container_width=True, config={"displayModeBar":False})
 
 # ─── TAB 3: KEY RATIOS ───────────────────────────────────────────────────────
@@ -616,7 +616,7 @@ with tab4:
         if rl:
             fig = go.Figure(go.Bar(x=rl,y=rv,marker_color="rgba(96,165,250,0.8)",marker_line_width=0,
                                    text=[f"{v:.1f}B" for v in rv],textposition="outside",textfont=dict(color="#8b92a5",size=10)))
-            fig.update_layout(**PLOT_LAYOUT, height=220)
+            fig.update_layout(**{**PLOT_LAYOUT, "height":220})
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
     with ch2:
@@ -628,7 +628,7 @@ with tab4:
                 line=dict(color="#4ade80",width=2.5),
                 marker=dict(color="#4ade80",size=8,line=dict(color="#0a0c10",width=2)),
                 text=[f"{v:.2f}" for v in ev],textposition="top center",textfont=dict(color="#8b92a5",size=10)))
-            fig.update_layout(**PLOT_LAYOUT, height=220)
+            fig.update_layout(**{**PLOT_LAYOUT, "height":220})
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
     ch3, ch4 = st.columns(2)
@@ -640,8 +640,7 @@ with tab4:
         fig = go.Figure(go.Bar(x=["Gross","Operating","Net","EBITDA"],y=[round(v,1) for v in m_vals],
             marker_color=m_cols,marker_line_width=0,
             text=[f"{v:.1f}%" for v in m_vals],textposition="outside",textfont=dict(color="#8b92a5",size=10)))
-        fig.update_layout(**PLOT_LAYOUT, height=220,
-            yaxis=dict(ticksuffix="%",gridcolor="rgba(255,255,255,0.04)",tickfont=dict(size=10)))
+        fig.update_layout(**{**PLOT_LAYOUT, "height":220, "yaxis":dict(ticksuffix="%",gridcolor="rgba(255,255,255,0.04)",tickfont=dict(size=10))})
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar":False})
 
     with ch4:
