@@ -208,6 +208,20 @@ def ratio_row(label, val, color="#94a3b8"):
 def ratio_card_close():
     return "</div>"
 
+# ── SESSION STATE ────────────────────────────────────────────────────────────
+if "screen" not in st.session_state:
+    st.session_state.screen = "search"
+if "ticker" not in st.session_state:
+    st.session_state.ticker = ""
+
+def go_to_dashboard(sym):
+    st.session_state.ticker = sym.strip().upper()
+    st.session_state.screen = "dashboard"
+
+def go_to_search():
+    st.session_state.screen = "search"
+    st.session_state.ticker = ""
+
 # ── COMPANY SEARCH ───────────────────────────────────────────────────────────
 @st.cache_data(ttl=300)
 def search_companies(query):
@@ -230,165 +244,204 @@ def search_companies(query):
     except:
         return []
 
-# ── HEADER ───────────────────────────────────────────────────────────────────
-st.markdown("""
-<div style="display:flex;align-items:center;justify-content:space-between;
-            padding-bottom:24px;border-bottom:1px solid rgba(148,163,184,0.08);margin-bottom:32px;">
-    <div style="display:flex;align-items:center;gap:14px;">
-        <div style="width:38px;height:38px;border-radius:10px;
-                    background:linear-gradient(135deg,#38bdf8,#0ea5e9);
-                    display:flex;align-items:center;justify-content:center;
-                    font-size:18px;box-shadow:0 4px 20px rgba(56,189,248,0.35);">📈</div>
-        <div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;
-                        color:#f8fafc;letter-spacing:-0.5px;line-height:1;">
-                Fin<span style='color:#38bdf8'>Scope</span>
-            </div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;
-                        color:#334155;letter-spacing:2px;margin-top:1px;">STOCK INTELLIGENCE</div>
-        </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:7px;height:7px;border-radius:50%;background:#4ade80;
-                    box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite;"></div>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#334155;letter-spacing:1px;">LIVE</span>
-    </div>
-</div>
-<style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}</style>
-""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# SCREEN 1 — SEARCH
+# ══════════════════════════════════════════════════════════════════════════════
+if st.session_state.screen == "search":
 
-# ── SEARCH SECTION ───────────────────────────────────────────────────────────
-st.markdown("""
-<div style="text-align:center;margin-bottom:28px;">
-    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;
-                color:#38bdf8;text-transform:uppercase;margin-bottom:12px;">Real-Time Financial Analysis</div>
-    <div style="font-family:'Space Grotesk',sans-serif;font-size:36px;font-weight:700;
-                color:#f8fafc;letter-spacing:-1.5px;line-height:1.1;margin-bottom:8px;">
-        Search Any Company
-    </div>
-    <div style="font-size:15px;color:#475569;max-width:480px;margin:0 auto;">
-        Type a company name or ticker — we'll find it instantly
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-col_search, col_btn = st.columns([5, 1])
-with col_search:
-    query = st.text_input("", placeholder="🔍  Search — Apple, Tesla, Reliance, TCS, NVDA, Bitcoin…", key="search_query")
-with col_btn:
-    st.markdown("<div style='margin-top:2px;'>", unsafe_allow_html=True)
-    search_clicked = st.button("Search →")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-# Search results
-selected_ticker = None
-
-if query and len(query) >= 2:
-    results = search_companies(query)
-    if results:
-        st.markdown("""
-        <div style="background:rgba(15,21,32,0.95);border:1px solid rgba(148,163,184,0.12);
-                    border-radius:14px;padding:8px;margin-top:6px;backdrop-filter:blur(20px);">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;
-                        color:#334155;text-transform:uppercase;padding:8px 12px 4px;">
-                Search Results
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        options = {f"{r['name']}  ·  {r['symbol']}  ·  {r['exchange']}": r['symbol'] for r in results}
-        choice = st.radio(
-            "", list(options.keys()), key="search_choice",
-            label_visibility="collapsed"
-        )
-
-        st.markdown("""
-        <style>
-        [data-testid="stRadio"] > div { gap: 2px !important; }
-        [data-testid="stRadio"] label {
-            background: rgba(15,21,32,0.6) !important;
-            border: 1px solid rgba(148,163,184,0.08) !important;
-            border-radius: 10px !important;
-            padding: 10px 16px !important;
-            cursor: pointer !important;
-            transition: all 0.15s !important;
-            width: 100% !important;
-        }
-        [data-testid="stRadio"] label:hover {
-            background: rgba(56,189,248,0.08) !important;
-            border-color: rgba(56,189,248,0.25) !important;
-        }
-        [data-testid="stRadio"] label > div > div:last-child {
-            font-family: 'Space Grotesk', sans-serif !important;
-            font-size: 14px !important;
-            color: #cbd5e1 !important;
-        }
-        [data-testid="stRadio"] [aria-checked="true"] + div {
-            color: #38bdf8 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        if search_clicked and choice:
-            selected_ticker = options[choice]
-    elif len(query) >= 2:
-        st.markdown("""<div style="color:#475569;font-family:'JetBrains Mono',monospace;font-size:12px;
-            padding:12px 0;text-align:center;">No results found. Try a different name or use the ticker directly.</div>""",
-            unsafe_allow_html=True)
-
-# Also allow direct ticker entry if no search results clicked
-if search_clicked and not selected_ticker and query:
-    selected_ticker = query.strip().upper()
-
-# ── QUICK PICKS ──────────────────────────────────────────────────────────────
-st.markdown("""<div style="margin:20px 0 8px;"><span style="font-family:'JetBrains Mono',monospace;
-font-size:10px;color:#334155;letter-spacing:2px;text-transform:uppercase;">Quick picks — </span>""",
-unsafe_allow_html=True)
-
-quick_cols = st.columns(10)
-quick_tickers = [("AAPL","Apple"),("MSFT","Microsoft"),("NVDA","Nvidia"),("TSLA","Tesla"),
-                 ("GOOGL","Google"),("AMZN","Amazon"),("RELIANCE.NS","Reliance"),
-                 ("TCS.NS","TCS"),("INFY.NS","Infosys"),("BTC-USD","Bitcoin")]
-
-for col, (sym, label) in zip(quick_cols, quick_tickers):
-    with col:
-        if st.button(label, key=f"q_{sym}"):
-            selected_ticker = sym
-
-st.markdown("</div>", unsafe_allow_html=True)
-st.markdown("<hr style='border-color:rgba(148,163,184,0.08);margin:20px 0 28px;'>", unsafe_allow_html=True)
-
-# ── LANDING STATE ─────────────────────────────────────────────────────────────
-if not selected_ticker:
+    # Logo
     st.markdown("""
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:12px;">
-        <div style="background:rgba(15,21,32,0.6);border:1px solid rgba(148,163,184,0.08);
-                    border-radius:14px;padding:24px;text-align:center;">
-            <div style="font-size:28px;margin-bottom:12px;">📊</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;
-                        color:#e2e8f0;margin-bottom:6px;">30+ Financial Ratios</div>
-            <div style="font-size:13px;color:#475569;line-height:1.5;">P/E, ROE, margins, debt ratios, growth metrics and more</div>
+    <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}</style>
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                padding-bottom:24px;border-bottom:1px solid rgba(148,163,184,0.08);margin-bottom:48px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+            <div style="width:38px;height:38px;border-radius:10px;
+                        background:linear-gradient(135deg,#38bdf8,#0ea5e9);
+                        display:flex;align-items:center;justify-content:center;
+                        font-size:18px;box-shadow:0 4px 20px rgba(56,189,248,0.35);">📈</div>
+            <div>
+                <div style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;
+                            color:#f8fafc;letter-spacing:-0.5px;line-height:1;">
+                    Fin<span style='color:#38bdf8'>Scope</span></div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                            color:#334155;letter-spacing:2px;margin-top:1px;">STOCK INTELLIGENCE</div>
+            </div>
         </div>
-        <div style="background:rgba(15,21,32,0.6);border:1px solid rgba(148,163,184,0.08);
-                    border-radius:14px;padding:24px;text-align:center;">
-            <div style="font-size:28px;margin-bottom:12px;">🎯</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;
-                        color:#e2e8f0;margin-bottom:6px;">DCF + Graham Valuation</div>
-            <div style="font-size:13px;color:#475569;line-height:1.5;">Fair value estimates with buy/hold/sell signal scoring</div>
-        </div>
-        <div style="background:rgba(15,21,32,0.6);border:1px solid rgba(148,163,184,0.08);
-                    border-radius:14px;padding:24px;text-align:center;">
-            <div style="font-size:28px;margin-bottom:12px;">🌍</div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;
-                        color:#e2e8f0;margin-bottom:6px;">Global Markets</div>
-            <div style="font-size:13px;color:#475569;line-height:1.5;">US, India (NSE/BSE), UK, Europe, crypto, ETFs</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:7px;height:7px;border-radius:50%;background:#4ade80;
+                        box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite;"></div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#334155;letter-spacing:1px;">LIVE DATA</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Hero text
+    st.markdown("""
+    <div style="text-align:center;margin-bottom:36px;">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:3px;
+                    color:#38bdf8;text-transform:uppercase;margin-bottom:14px;">Real-Time Financial Analysis</div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:52px;font-weight:700;
+                    color:#f8fafc;letter-spacing:-2px;line-height:1.05;margin-bottom:12px;">
+            Analyse Any Stock<br><span style='color:#38bdf8'>Instantly</span>
+        </div>
+        <div style="font-size:16px;color:#475569;max-width:440px;margin:0 auto;line-height:1.6;">
+            DCF valuation · 30+ ratios · Buy/Sell signals<br>for any stock globally — free, live, automated
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Search bar
+    _, sc, _ = st.columns([1, 3, 1])
+    with sc:
+        query = st.text_input("", placeholder="🔍  Apple, Tesla, RELIANCE.NS, NVDA, Bitcoin…", key="search_query")
+        search_clicked = st.button("Search →", key="search_btn", use_container_width=True)
+
+        # Live results dropdown
+        if query and len(query) >= 2:
+            results = search_companies(query)
+            if results:
+                st.markdown("""
+                <div style="background:rgba(10,14,22,0.98);border:1px solid rgba(56,189,248,0.15);
+                            border-radius:12px;padding:6px;margin-top:4px;backdrop-filter:blur(20px);">
+                    <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;
+                                color:#334155;text-transform:uppercase;padding:6px 10px 2px;">Results</div>
+                </div>""", unsafe_allow_html=True)
+
+                for r in results:
+                    label = f"{r['name']}  ·  **{r['symbol']}**  ·  {r['exchange']}"
+                    if st.button(f"{r['name']}   {r['symbol']}   {r['exchange']}", key=f"res_{r['symbol']}", use_container_width=True):
+                        go_to_dashboard(r['symbol'])
+                        st.rerun()
+
+                st.markdown("""
+                <style>
+                div[data-testid="stVerticalBlock"] > div:has(button[kind="secondary"]) button {
+                    background: rgba(15,21,32,0.7) !important;
+                    border: 1px solid rgba(148,163,184,0.08) !important;
+                    border-radius: 10px !important;
+                    color: #cbd5e1 !important;
+                    font-family: 'Space Grotesk', sans-serif !important;
+                    font-size: 13px !important;
+                    font-weight: 400 !important;
+                    text-align: left !important;
+                    padding: 10px 16px !important;
+                    box-shadow: none !important;
+                    margin-bottom: 2px !important;
+                }
+                div[data-testid="stVerticalBlock"] > div:has(button[kind="secondary"]) button:hover {
+                    background: rgba(56,189,248,0.08) !important;
+                    border-color: rgba(56,189,248,0.2) !important;
+                    color: #38bdf8 !important;
+                }
+                </style>""", unsafe_allow_html=True)
+
+            elif len(query) >= 2:
+                st.markdown('<div style="color:#475569;font-family:JetBrains Mono,monospace;font-size:12px;padding:8px 0;text-align:center;">No results — try the ticker directly e.g. AAPL</div>', unsafe_allow_html=True)
+
+        # Direct ticker fallback
+        if search_clicked and query:
+            go_to_dashboard(query)
+            st.rerun()
+
+    # Quick picks
+    st.markdown("<div style='margin:36px 0 12px;text-align:center;font-family:JetBrains Mono,monospace;font-size:9px;letter-spacing:2px;color:#334155;text-transform:uppercase;'>Quick picks</div>", unsafe_allow_html=True)
+    qc = st.columns(10)
+    quick_tickers = [("AAPL","Apple"),("MSFT","Microsoft"),("NVDA","Nvidia"),("TSLA","Tesla"),
+                     ("GOOGL","Google"),("AMZN","Amazon"),("RELIANCE.NS","Reliance"),
+                     ("TCS.NS","TCS"),("INFY.NS","Infosys"),("BTC-USD","Bitcoin")]
+    for col, (sym, lbl) in zip(qc, quick_tickers):
+        with col:
+            if st.button(lbl, key=f"q_{sym}"):
+                go_to_dashboard(sym)
+                st.rerun()
+
+    # Feature cards
+    st.markdown("""
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px;">
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+            <div style="font-size:26px;margin-bottom:10px;">📊</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">30+ Financial Ratios</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">P/E, ROE, margins, liquidity, growth metrics and more</div>
+        </div>
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+            <div style="font-size:26px;margin-bottom:10px;">🎯</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">DCF + Graham Valuation</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">Fair value estimates with buy / hold / sell scoring</div>
+        </div>
+        <div style="background:rgba(15,21,32,0.5);border:1px solid rgba(148,163,184,0.07);border-radius:14px;padding:24px;text-align:center;">
+            <div style="font-size:26px;margin-bottom:10px;">🌍</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:6px;">Global Markets</div>
+            <div style="font-size:12px;color:#475569;line-height:1.6;">US, India, UK, Europe, crypto and ETFs</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.stop()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# SCREEN 2 — DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── BACK BUTTON STYLE (scoped to key) ────────────────────────────────────────
+st.markdown("""
+<style>
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+button[kind="secondary"]#back_btn_widget,
+div[data-testid="column"]:first-child button {
+    background: rgba(15,21,32,0.7) !important;
+    border: 1px solid rgba(148,163,184,0.12) !important;
+    border-radius: 8px !important;
+    color: #64748b !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    padding: 8px 14px !important;
+    box-shadow: none !important;
+    width: auto !important;
+    letter-spacing: 0.2px !important;
+}
+div[data-testid="column"]:first-child button:hover {
+    border-color: rgba(56,189,248,0.3) !important;
+    color: #38bdf8 !important;
+    background: rgba(56,189,248,0.05) !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── DASHBOARD HEADER — single unified row ─────────────────────────────────────
+back_col, logo_col, live_col = st.columns([1, 7, 1])
+
+with back_col:
+    if st.button("← Back", key="back_btn"):
+        go_to_search()
+        st.rerun()
+
+with logo_col:
+    st.markdown("""
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:6px 0;">
+        <div style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#38bdf8,#0ea5e9);
+                    display:flex;align-items:center;justify-content:center;font-size:14px;
+                    box-shadow:0 2px 12px rgba(56,189,248,0.3);">📈</div>
+        <span style="font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;
+                     color:#f8fafc;letter-spacing:-0.5px;">
+            Fin<span style='color:#38bdf8'>Scope</span>
+        </span>
+    </div>""", unsafe_allow_html=True)
+
+with live_col:
+    st.markdown("""
+    <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:10px 0;">
+        <div style="width:6px;height:6px;border-radius:50%;background:#4ade80;
+                    box-shadow:0 0 8px #4ade80;animation:pulse 2s infinite;"></div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                     color:#334155;letter-spacing:1px;">LIVE</span>
+    </div>""", unsafe_allow_html=True)
+
+st.markdown("<div style='border-top:1px solid rgba(148,163,184,0.08);margin:4px 0 24px;'></div>",
+            unsafe_allow_html=True)
+
 # ── FETCH DATA ───────────────────────────────────────────────────────────────
-ticker = selected_ticker.upper().strip()
+ticker = st.session_state.ticker
 
 with st.spinner(f"Loading {ticker}…"):
     try:
@@ -609,37 +662,89 @@ with tab1:
     st.markdown("<div style='margin:8px 0;'></div>", unsafe_allow_html=True)
     st.markdown('<div style="font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:2px;color:#334155;text-transform:uppercase;margin-bottom:16px;">Performance Gauges</div>', unsafe_allow_html=True)
 
-    def gauge(val, title, suffix, max_val, invert=False):
-        if val is None: val = 0
-        pct = min(val/max_val, 1)
-        if invert: color = "#f87171" if pct > 0.66 else "#fbbf24" if pct > 0.33 else "#4ade80"
-        else:      color = "#4ade80" if pct > 0.66 else "#fbbf24" if pct > 0.33 else "#f87171"
-        fig = go.Figure(go.Indicator(
-            mode="gauge+number", value=round(val, 1),
-            number=dict(suffix=suffix, font=dict(color="#f1f5f9", family="Space Grotesk", size=24)),
-            gauge=dict(
-                axis=dict(range=[0,max_val], tickcolor="#334155", tickfont=dict(color="#334155",size=9)),
-                bar=dict(color=color, thickness=0.65),
-                bgcolor="rgba(255,255,255,0.02)", borderwidth=0,
-            ),
-            title=dict(text=title, font=dict(color="#475569", size=10, family="JetBrains Mono"))
-        ))
-        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                          height=175, margin=dict(l=20,r=20,t=30,b=5))
-        return fig
+    # Pull values with multiple field fallbacks
+    raw_pe     = gv(info,"trailingPE") or gv(info,"forwardPE")
+    raw_margin = gv(info,"profitMargins") or gv(info,"netMargins") or gv(info,"returnOnAssets")
+    raw_roe    = gv(info,"returnOnEquity")
+    raw_de     = gv(info,"debtToEquity")
+
+    def stat_gauge_html(title, raw_val, display_val, bar_pct, bar_color, sub_label, rating, rating_color):
+        """A clean horizontal-bar stat card that always renders."""
+        pct = max(0, min(bar_pct, 100))
+        return f"""
+        <div style="background:rgba(15,21,32,0.85);border:1px solid rgba(148,163,184,0.1);
+                    border-radius:14px;padding:22px 20px;backdrop-filter:blur(12px);">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:2px;
+                        text-transform:uppercase;color:#475569;margin-bottom:14px;">{title}</div>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:34px;font-weight:700;
+                        color:#f1f5f9;line-height:1;margin-bottom:6px;">{display_val}</div>
+            <div style="font-size:11px;color:#475569;margin-bottom:14px;">{sub_label}</div>
+            <div style="background:rgba(255,255,255,0.05);border-radius:4px;height:6px;overflow:hidden;margin-bottom:10px;">
+                <div style="width:{pct}%;height:100%;background:{bar_color};border-radius:4px;
+                            transition:width 1s ease;box-shadow:0 0 8px {bar_color}55;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#334155;">0 — {int(pct)}% of range</div>
+                <div style="background:rgba(0,0,0,0.3);border:1px solid {rating_color}44;border-radius:6px;
+                            padding:2px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;
+                            color:{rating_color};letter-spacing:1px;">{rating}</div>
+            </div>
+        </div>"""
+
+    def get_rating(val, thresholds, labels, invert=False):
+        """Return (rating_text, color) based on value."""
+        if val is None: return "N/A", "#475569"
+        lo, hi = thresholds
+        if invert:
+            if val <= lo:   return labels[0], "#4ade80"
+            elif val <= hi: return labels[1], "#fbbf24"
+            else:           return labels[2], "#f87171"
+        else:
+            if val >= hi:   return labels[0], "#4ade80"
+            elif val >= lo: return labels[1], "#fbbf24"
+            else:           return labels[2], "#f87171"
 
     gc = st.columns(4)
-    gauges = [
-        (gv(info,"trailingPE") or 0,                   "P/E RATIO",    "x",  60, True),
-        ((gv(info,"profitMargins") or 0)*100,           "NET MARGIN",   "%",  40, False),
-        ((gv(info,"returnOnEquity") or 0)*100,          "ROE",          "%",  50, False),
-        ((gv(info,"debtToEquity") or 0)/100,            "DEBT/EQUITY",  "",   3,  True),
-    ]
-    for col, (val, title, suffix, maxv, inv) in zip(gc, gauges):
-        with col:
-            st.markdown('<div style="background:rgba(15,21,32,0.7);border:1px solid rgba(148,163,184,0.08);border-radius:14px;padding:4px;">', unsafe_allow_html=True)
-            st.plotly_chart(gauge(val,title,suffix,maxv,inv), use_container_width=True, config={"displayModeBar":False})
-            st.markdown("</div>", unsafe_allow_html=True)
+
+    # ── P/E Ratio ──
+    with gc[0]:
+        v = raw_pe
+        rating, rc = get_rating(v, (15, 25), ["CHEAP", "FAIR", "PRICEY"], invert=True)
+        display = f"{v:.1f}x" if v else "—"
+        pct = (1 - min((v or 0)/60, 1)) * 100 if v else 0
+        bar_c = rc
+        sub = "Trailing P/E — lower is cheaper"
+        st.markdown(stat_gauge_html("P/E Ratio", v, display, pct, bar_c, sub, rating, rc), unsafe_allow_html=True)
+
+    # ── Net Margin ──
+    with gc[1]:
+        v = raw_margin
+        vp = (v or 0) * 100
+        rating, rc = get_rating(vp, (5, 15), ["STRONG", "MODERATE", "WEAK"])
+        display = f"{vp:.1f}%" if v is not None else "—"
+        pct = min(max(vp / 40 * 100, 0), 100)
+        sub = "Net profit as % of revenue"
+        st.markdown(stat_gauge_html("Net Margin", v, display, pct, rc, sub, rating, rc), unsafe_allow_html=True)
+
+    # ── Return on Equity ──
+    with gc[2]:
+        v = raw_roe
+        vp = (v or 0) * 100
+        rating, rc = get_rating(vp, (10, 20), ["STRONG", "MODERATE", "WEAK"])
+        display = f"{vp:.1f}%" if v is not None else "—"
+        pct = min(max(vp / 50 * 100, 0), 100)
+        sub = "Profit generated per equity dollar"
+        st.markdown(stat_gauge_html("Return on Equity", v, display, pct, rc, sub, rating, rc), unsafe_allow_html=True)
+
+    # ── Debt / Equity ──
+    with gc[3]:
+        v = raw_de
+        vr = (v or 0) / 100  # yfinance gives D/E * 100
+        rating, rc = get_rating(vr, (0.5, 1.5), ["LOW", "MODERATE", "HIGH"], invert=True)
+        display = f"{vr:.2f}" if v is not None else "—"
+        pct = min(max(vr / 3 * 100, 0), 100)
+        sub = "Total debt relative to equity"
+        st.markdown(stat_gauge_html("Debt / Equity", v, display, pct, rc, sub, rating, rc), unsafe_allow_html=True)
 
 # ─── TAB 2: VALUATION ────────────────────────────────────────────────────────
 with tab2:
